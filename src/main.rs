@@ -24,8 +24,8 @@ fn download(href: &str, path: &std::path::Path) {
 }
 
 fn validate(verification: &objects::SourceVerification, path: &std::path::Path) -> std::io::Result<bool> {
-    match verification {
-        &objects::SourceVerification::Sha256(ref s) => {
+    match *verification {
+        objects::SourceVerification::Sha256(ref s) => {
             let mut hasher = crypto_hash::Hasher::new(crypto_hash::Algorithm::SHA256);
             let mut file = std::fs::File::open(path)?;
             std::io::copy(&mut file, &mut hasher)?;
@@ -54,10 +54,10 @@ fn build(spec: &objects::BuildSpec, srcdir: &std::path::Path, pkgdir: &std::path
         let stdin = child.stdin.as_mut().unwrap();
 
         use std::io::Write;
-        stdin.write_all("set -e -o pipefail -u\n".as_bytes()).unwrap();
+        stdin.write_all(b"set -e -o pipefail -u\n").unwrap();
         for line in script {
             stdin.write_all(line.as_bytes()).unwrap();
-            stdin.write_all("\n".as_bytes()).unwrap();
+            stdin.write_all(b"\n").unwrap();
         }
     }
 
