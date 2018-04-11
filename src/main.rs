@@ -1,10 +1,12 @@
 #[macro_use] extern crate serde_derive;
+#[macro_use] extern crate quick_error;
 extern crate serde_yaml;
 extern crate mkdirp;
 extern crate crypto_hash;
 extern crate hex_slice;
 
 mod objects;
+mod targets;
 
 fn download(href: &str, path: &std::path::Path) {
     if path.exists() {
@@ -67,6 +69,10 @@ fn build(spec: &objects::BuildSpec, srcdir: &std::path::Path, pkgdir: &std::path
     }
 }
 
+fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &std::path::Path) -> Result<Box<std::path::PathBuf>, targets::xbps::Error> {
+    targets::xbps::package(spec, pkgdir, destdir)
+}
+
 fn main() {
     println!("Hello, world!");
     let spec: objects::BuildSpec = {
@@ -76,6 +82,7 @@ fn main() {
     let sources_dir = std::path::PathBuf::from("build/sources");
     let install_dir = std::path::PathBuf::from("build/pkg");
     let work_dir = std::path::PathBuf::from("build/work");
+    let target_dir = std::path::PathBuf::from("build/output");
     mkdirp::mkdirp(&sources_dir).unwrap();
     mkdirp::mkdirp(&install_dir).unwrap();
     mkdirp::mkdirp(&work_dir).unwrap();
@@ -94,5 +101,7 @@ fn main() {
         }
     }
     build(&spec, &sources_dir, &install_dir, &work_dir);
+    mkdirp::mkdirp(&target_dir).unwrap();
+    package(&spec, &install_dir, &target_dir).unwrap();
     println!("{:?}", spec);
 }
