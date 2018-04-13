@@ -71,7 +71,7 @@ pub fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &st
         }
         let result = std::process::Command::new("tar")
             .current_dir(tmpdir)
-            .arg("cf")
+            .arg("chf")
             .arg(&dest)
             .arg(".")
             .status()?;
