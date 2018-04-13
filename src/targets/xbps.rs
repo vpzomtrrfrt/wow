@@ -3,6 +3,7 @@ extern crate tempfile;
 extern crate target;
 
 use std;
+use crypto_hash;
 use objects;
 
 #[derive(Serialize)]
@@ -55,12 +56,27 @@ quick_error! {
         Plist(err: plist::Error) {
             from()
         }
+        SystemTime(err: std::time::SystemTimeError) {
+            from()
+        }
+        StripPrefix(err: std::path::StripPrefixError) {
+            from()
+        }
         InvalidFilePath {}
         CommandStatus {}
     }
 }
 
-fn process_dir(dir: &std::path::Path, files: &mut PkgFiles, linkdir: Option<&std::path::Path>) -> Result<u64, Error> {
+fn hash(path: &std::path::Path) -> std::io::Result<String> {
+    let mut hasher = crypto_hash::Hasher::new(crypto_hash::Algorithm::SHA256);
+    let mut file = std::fs::File::open(path)?;
+    std::io::copy(&mut file, &mut hasher)?;
+    use hex_slice::AsHex;
+    let hash = format!("{:02x}", hasher.finish().plain_hex(false));
+    Ok(hash)
+}
+
+fn process_dir(root: &std::path::Path, dir: &std::path::Path, files: &mut PkgFiles, linkdir: Option<&std::path::Path>) -> Result<u64, Error> {
     let mut size = 0;
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
@@ -71,11 +87,21 @@ fn process_dir(dir: &std::path::Path, files: &mut PkgFiles, linkdir: Option<&std
             std::os::unix::fs::symlink(path, target)?;
         }
         let filetype = entry.file_type()?;
+        let path = entry.path();
         if filetype.is_dir() {
-            size += process_dir(&entry.path(), files, None)?;
+            files.dirs.push(PkgDir {
+                file: format!("/{}", path.strip_prefix(root)?.display())
+            });
+            size += process_dir(root, &path, files, None)?;
         }
         else if filetype.is_file() {
-            size += entry.metadata()?.len();
+            let metadata = entry.metadata()?;
+            files.files.push(PkgFile {
+                file: format!("/{}", path.strip_prefix(root)?.display()),
+                mtime: metadata.modified()?.duration_since(std::time::UNIX_EPOCH)?.as_secs(),
+                sha256: hash(&path)?
+            });
+            size += metadata.len();
         }
     }
     Ok(size)
@@ -83,7 +109,7 @@ fn process_dir(dir: &std::path::Path, files: &mut PkgFiles, linkdir: Option<&std
 
 fn process_files(pkgdir: &std::path::Path, tmpdir: &std::path::Path) -> Result<(u64, PkgFiles), Error> {
     let mut files = PkgFiles::new();
-    Ok((process_dir(pkgdir, &mut files, Some(tmpdir))?, files))
+    Ok((process_dir(pkgdir, pkgdir, &mut files, Some(tmpdir))?, files))
 }
 
 pub fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &std::path::Path) -> Result<Box<std::path::PathBuf>, Error> {
