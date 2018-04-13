@@ -57,14 +57,15 @@ pub fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &st
     };
     {
         let tmpdir = tempfile::tempdir()?;
-        println!("exists? {}", tmpdir.path().exists());
-        let props_file = std::fs::File::create(tmpdir.path().join("props.plist"))?;
+        let tmpdir = tmpdir.path();
+        println!("exists? {}", tmpdir.exists());
+        let props_file = std::fs::File::create(tmpdir.join("props.plist"))?;
         plist::serde::serialize_to_xml(props_file, &props)?;
         println!("Props file created.");
         for entry in std::fs::read_dir(pkgdir)? {
             let entry = entry?.path();
             println!("exists2? {}", entry.exists());
-            let target = tmpdir.path().join(entry.file_name().ok_or_else(|| Error::InvalidFilePath)?);
+            let target = tmpdir.join(entry.file_name().ok_or_else(|| Error::InvalidFilePath)?);
             println!("linking {} in {}", entry.display(), target.display());
             std::os::unix::fs::symlink(entry, target)?;
         }
