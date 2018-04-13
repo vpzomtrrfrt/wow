@@ -19,6 +19,33 @@ struct PkgProps {
     maintainer: Option<String>
 }
 
+#[derive(Serialize)]
+struct PkgDir {
+    file: String
+}
+
+#[derive(Serialize)]
+struct PkgFile {
+    file: String,
+    mtime: u64,
+    sha256: String
+}
+
+#[derive(Serialize)]
+struct PkgFiles {
+    dirs: Vec<PkgDir>,
+    files: Vec<PkgFile>
+}
+
+impl PkgFiles {
+    fn new() -> Self {
+        PkgFiles {
+            dirs: vec![],
+            files: vec![]
+        }
+    }
+}
+
 quick_error! {
     #[derive(Debug)]
     pub enum Error {
@@ -33,45 +60,66 @@ quick_error! {
     }
 }
 
+fn process_dir(dir: &std::path::Path, files: &mut PkgFiles, linkdir: Option<&std::path::Path>) -> Result<u64, Error> {
+    let mut size = 0;
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if let Some(linkdir) = linkdir {
+            let path = entry.path();
+            let target = linkdir.join(path.file_name().ok_or_else(|| Error::InvalidFilePath)?);
+            println!("linking {} in {}", path.display(), target.display());
+            std::os::unix::fs::symlink(path, target)?;
+        }
+        let filetype = entry.file_type()?;
+        if filetype.is_dir() {
+            size += process_dir(&entry.path(), files, None)?;
+        }
+        else if filetype.is_file() {
+            size += entry.metadata()?.len();
+        }
+    }
+    Ok(size)
+}
+
+fn process_files(pkgdir: &std::path::Path, tmpdir: &std::path::Path) -> Result<(u64, PkgFiles), Error> {
+    let mut files = PkgFiles::new();
+    Ok((process_dir(pkgdir, &mut files, Some(tmpdir))?, files))
+}
+
 pub fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &std::path::Path) -> Result<Box<std::path::PathBuf>, Error> {
     println!("Starting [package]");
     let pkgdir = pkgdir.canonicalize()?;
     let destdir = destdir.canonicalize()?;
     let arch = target::arch();
     let dest = destdir.join(format!("{}-{}_{}.{}.xbps", spec.name, spec.version, 1, arch));
-    let props = PkgProps {
-        architecture: arch.to_owned(),
-        installed_size: std::fs::metadata(&pkgdir)?.len(),
-        pkgname: spec.name.to_owned(),
-        pkgver: format!("{}-{}", spec.name, spec.version),
-        run_depends: [&spec.depends.all, &spec.depends.run]
-            .iter()
-            .flat_map(|l| l.iter())
-            .map(|s| s.to_owned())
-            .collect(),
-        version: spec.version.to_owned(),
-        short_desc: None,
-        homepage: None,
-        license: None,
-        maintainer: None
-    };
     {
         let tmpdir = tempfile::tempdir()?;
         let tmpdir = tmpdir.path();
-        println!("exists? {}", tmpdir.exists());
+        let (size, files) = process_files(&pkgdir, tmpdir)?;
+        let files_file = std::fs::File::create(tmpdir.join("files.plist"))?;
+        plist::serde::serialize_to_xml(files_file, &files)?;
+        let props = PkgProps {
+            architecture: arch.to_owned(),
+            installed_size: size,
+            pkgname: spec.name.to_owned(),
+            pkgver: format!("{}-{}", spec.name, spec.version),
+            run_depends: [&spec.depends.all, &spec.depends.run]
+                .iter()
+                .flat_map(|l| l.iter())
+                .map(|s| s.to_owned())
+                .collect(),
+                version: spec.version.to_owned(),
+                short_desc: None,
+                homepage: None,
+                license: None,
+                maintainer: None
+        };
         let props_file = std::fs::File::create(tmpdir.join("props.plist"))?;
         plist::serde::serialize_to_xml(props_file, &props)?;
         println!("Props file created.");
-        for entry in std::fs::read_dir(pkgdir)? {
-            let entry = entry?.path();
-            println!("exists2? {}", entry.exists());
-            let target = tmpdir.join(entry.file_name().ok_or_else(|| Error::InvalidFilePath)?);
-            println!("linking {} in {}", entry.display(), target.display());
-            std::os::unix::fs::symlink(entry, target)?;
-        }
         let result = std::process::Command::new("tar")
             .current_dir(tmpdir)
-            .arg("chf")
+            .arg("chJf")
             .arg(&dest)
             .arg(".")
             .status()?;
