@@ -1,5 +1,11 @@
+use std;
+
 fn default_epoch() -> String {
     "1".to_owned()
+}
+
+fn empty_map<K: std::cmp::Eq + std::hash::Hash, V>() -> std::collections::HashMap<K, V> {
+    std::collections::HashMap::new()
 }
 
 #[derive(Deserialize, Debug)]
@@ -10,7 +16,9 @@ pub struct BuildSpec {
     pub epoch: String,
     pub depends: Dependencies,
     pub sources: Vec<Source>,
-    pub scripts: Scripts
+    pub scripts: Scripts,
+    #[serde(default = "empty_map")]
+    pub alternatives: std::collections::HashMap<String,std::collections::HashMap<String,String>>
 }
 
 fn empty_vec<T>() -> Vec<T> {

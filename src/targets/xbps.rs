@@ -6,8 +6,11 @@ use std;
 use crypto_hash;
 use objects;
 
+use std::collections::HashMap;
+
 #[derive(Serialize)]
 struct PkgProps {
+    alternatives: Option<HashMap<String, Vec<String>>>,
     architecture: String,
     installed_size: u64,
     pkgname: String,
@@ -127,14 +130,25 @@ pub fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &st
         let run_depends = [&spec.depends.all, &spec.depends.run]
                 .iter()
                 .flat_map(|l| l.iter())
-                .map(|s| s.to_owned())
+                .map(|s| format!("{}>=0", s))
                 .collect::<Vec<_>>();
         let run_depends = if run_depends.len() > 0 {
             Some(run_depends)
         } else {
             None
         };
+        let alternatives = spec.alternatives.clone().into_iter()
+                          .map(|(k, v)| (k, v.iter()
+                                         .map(|(k, v)| format!("{}:{}", k, v))
+                                         .collect()))
+                          .collect::<HashMap<String,Vec<String>>>();
+        let alternatives = if alternatives.len() > 0 {
+            Some(alternatives)
+        } else {
+            None
+        };
         let props = PkgProps {
+            alternatives,
             architecture: arch.to_owned(),
             installed_size: size,
             pkgname: spec.name.to_owned(),
