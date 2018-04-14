@@ -1,7 +1,13 @@
+fn default_epoch() -> String {
+    "1".to_owned()
+}
+
 #[derive(Deserialize, Debug)]
 pub struct BuildSpec {
     pub name: String,
     pub version: String,
+    #[serde(default = "default_epoch")]
+    pub epoch: String,
     pub depends: Dependencies,
     pub sources: Vec<Source>,
     pub scripts: Scripts

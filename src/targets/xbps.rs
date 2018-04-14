@@ -117,7 +117,7 @@ pub fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &st
     let pkgdir = pkgdir.canonicalize()?;
     let destdir = destdir.canonicalize()?;
     let arch = target::arch();
-    let dest = destdir.join(format!("{}-{}_{}.{}.xbps", spec.name, spec.version, 1, arch));
+    let dest = destdir.join(format!("{}-{}_{}.{}.xbps", spec.name, spec.version, spec.epoch, arch));
     {
         let tmpdir = tempfile::tempdir()?;
         let tmpdir = tmpdir.path();
@@ -128,7 +128,7 @@ pub fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &st
             architecture: arch.to_owned(),
             installed_size: size,
             pkgname: spec.name.to_owned(),
-            pkgver: format!("{}-{}", spec.name, spec.version),
+            pkgver: format!("{}-{}_{}", spec.name, spec.version, spec.epoch),
             run_depends: [&spec.depends.all, &spec.depends.run]
                 .iter()
                 .flat_map(|l| l.iter())
