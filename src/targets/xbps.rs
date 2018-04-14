@@ -12,7 +12,7 @@ struct PkgProps {
     installed_size: u64,
     pkgname: String,
     pkgver: String,
-    run_depends: Vec<String>,
+    run_depends: Option<Vec<String>>,
     version: String,
     short_desc: Option<String>,
     homepage: Option<String>,
@@ -124,21 +124,27 @@ pub fn package(spec: &objects::BuildSpec, pkgdir: &std::path::Path, destdir: &st
         let (size, files) = process_files(&pkgdir, tmpdir)?;
         let files_file = std::fs::File::create(tmpdir.join("files.plist"))?;
         plist::serde::serialize_to_xml(files_file, &files)?;
+        let run_depends = [&spec.depends.all, &spec.depends.run]
+                .iter()
+                .flat_map(|l| l.iter())
+                .map(|s| s.to_owned())
+                .collect::<Vec<_>>();
+        let run_depends = if run_depends.len() > 0 {
+            Some(run_depends)
+        } else {
+            None
+        };
         let props = PkgProps {
             architecture: arch.to_owned(),
             installed_size: size,
             pkgname: spec.name.to_owned(),
             pkgver: format!("{}-{}_{}", spec.name, spec.version, spec.epoch),
-            run_depends: [&spec.depends.all, &spec.depends.run]
-                .iter()
-                .flat_map(|l| l.iter())
-                .map(|s| s.to_owned())
-                .collect(),
-                version: spec.version.to_owned(),
-                short_desc: None,
-                homepage: None,
-                license: None,
-                maintainer: None
+            run_depends,
+            version: spec.version.to_owned(),
+            short_desc: None,
+            homepage: None,
+            license: None,
+            maintainer: None
         };
         let props_file = std::fs::File::create(tmpdir.join("props.plist"))?;
         plist::serde::serialize_to_xml(props_file, &props)?;
